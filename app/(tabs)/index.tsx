@@ -1,74 +1,171 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, Button, FlatList, Image, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Link } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
+import { collection, getDocs, getFirestore } from 'firebase/firestore';
+import { app } from '../../config/firebase';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+type Product = {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  shopId: string;
+  unit: string;
+};
 
 export default function HomeScreen() {
+  const { user, logout } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const db = getFirestore(app);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'products'));
+        const productsData: Product[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          productsData.push({ 
+            id: doc.id, 
+            name: data.name || 'No Name',
+            price: data.price || 0,
+            image: data.image || 'https://via.placeholder.com/150',
+            shopId: data.shopId || '',
+            unit: data.unit || ''
+          });
+        });
+        setProducts(productsData);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.welcomeText}>Welcome {user?.name}!</Text>
+        <Button title="Logout" onPress={logout} />
+      </View>
+
+      <Text style={styles.sectionTitle}>Featured Products</Text>
+      
+      {products.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text>No products available</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={products}
+          numColumns={2}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <Link href={{ pathname: '/product/[id]', params: { id: item.id } }} asChild>
+              <TouchableOpacity style={styles.productCard}>
+                <Image 
+                  source={{ uri: item.image }} 
+                  style={styles.productImage} 
+                  defaultSource={{ uri: 'https://via.placeholder.com/150' }}
+                />
+                <Text style={styles.productName}>{item.name}</Text>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
+                  <Text style={styles.productUnit}>/{item.unit}</Text>
+                </View>
+              </TouchableOpacity>
+            </Link>
+          )}
+          contentContainerStyle={styles.productsContainer}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
   },
-  stepContainer: {
-    gap: 8,
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  welcomeText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  productsContainer: {
+    paddingBottom: 20,
+  },
+  productCard: {
+    flex: 1,
+    margin: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  productImage: {
+    width: '100%',
+    height: 120,
+    resizeMode: 'contain',
     marginBottom: 8,
+    borderRadius: 4,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  productName: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  productPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2e86de',
+  },
+  productUnit: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
   },
 });
