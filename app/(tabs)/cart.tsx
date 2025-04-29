@@ -1,50 +1,86 @@
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useCart } from '../../context/CartProvider';
-import { collection, addDoc, getFirestore } from 'firebase/firestore';
+import { collection, addDoc, getFirestore, doc, setDoc } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 
 export default function CartScreen() {
-  const { cartItems, total, removeFromCart, updateQuantity, clearCart } = useCart();
+  const { cartItems, total, removeFromCart, updateQuantity, clearCart, loading } = useCart();
   const { user } = useAuth();
   const [placingOrder, setPlacingOrder] = useState(false);
   const db = getFirestore(app);
 
+  const showNotification = async (title: string, body: string) => {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null, // Send immediately
+    });
+  };
+
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) {
-      Alert.alert('Error', 'Your cart is empty');
+      await showNotification('Order Failed', 'Your cart is empty');
       return;
     }
 
     if (!user) {
-      Alert.alert('Error', 'Please login to place an order');
+      await showNotification('Order Failed', 'Please login to place an order');
       return;
     }
 
     setPlacingOrder(true);
     try {
-      // Create order document
+      // Create order document with shop information
       const orderRef = await addDoc(collection(db, 'orders'), {
         userId: user.id,
-        items: cartItems,
+        userEmail: user.email,
+        items: cartItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          unit: item.unit,
+          image: item.image || '',
+          shopId: item.shopId,
+          shopName: item.shopName,
+          farmerId: item.farmerId
+        })),
         total: total,
         status: 'pending',
         createdAt: new Date(),
-        deliveryAddress: 'To be specified', // You can add address functionality
-        contactNumber: 'To be specified'    // You can add contact functionality
+        deliveryAddress: 'To be specified',
+        contactNumber: 'To be specified'
       });
 
-      Alert.alert('Success', `Order #${orderRef.id} placed successfully!`);
+      // Clear the user's cart after successful order
+      const cartRef = doc(db, 'carts', user.id);
+      await setDoc(cartRef, { items: [] });
+      
+      await showNotification('Order Successful', `Order #${orderRef.id} placed successfully!`);
       clearCart();
     } catch (error) {
       console.error('Error placing order:', error);
-      Alert.alert('Error', 'Failed to place order');
+      await showNotification('Order Failed', 'Failed to place order');
     } finally {
       setPlacingOrder(false);
     }
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -62,7 +98,13 @@ export default function CartScreen() {
               <View style={styles.item}>
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemPrice}>${item.price.toFixed(2)}/{item.unit}</Text>
+                  <Text style={styles.itemPrice}>৳{item.price.toFixed(2)}/{item.unit}</Text>
+                  {item.shopName && (
+                    <>
+                      <Text style={styles.shopName}>Shop: {item.shopName}</Text>
+                      <Text style={styles.shopName}>Farmer ID: {item.farmerId}</Text>
+                    </>
+                  )}
                 </View>
                 <View style={styles.itemActions}>
                   <View style={styles.quantityContainer}>
@@ -77,8 +119,11 @@ export default function CartScreen() {
                       <Ionicons name="add-circle-outline" size={24} color="#2e86de" />
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity onPress={() => removeFromCart(item.id)}>
-                    <Ionicons name="trash-outline" size={24} color="#ff3b30" />
+                  <TouchableOpacity 
+                    style={styles.removeButton}
+                    onPress={() => removeFromCart(item.id)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#fff" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -89,7 +134,7 @@ export default function CartScreen() {
           <View style={styles.summaryContainer}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total:</Text>
-              <Text style={styles.totalAmount}>${total.toFixed(2)}</Text>
+              <Text style={styles.totalAmount}>৳{total.toFixed(2)}</Text>
             </View>
 
             <View style={styles.buttonContainer}>
@@ -97,7 +142,7 @@ export default function CartScreen() {
                 style={[styles.button, styles.clearButton]}
                 onPress={clearCart}
               >
-                <Text style={styles.buttonText}>Clear Cart</Text>
+                <Text style={styles.clearButtonText}>Clear Cart</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -127,6 +172,11 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: '#f8f9fa',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -166,6 +216,12 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 4,
+  },
+  shopName: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
   },
   itemActions: {
     flexDirection: 'row',
@@ -174,12 +230,20 @@ const styles = StyleSheet.create({
   quantityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
+    marginRight: 10,
   },
   quantity: {
     marginHorizontal: 12,
     fontSize: 16,
     fontWeight: '500',
+  },
+  removeButton: {
+    backgroundColor: '#ff3b30',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   summaryContainer: {
     backgroundColor: '#fff',
@@ -218,11 +282,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   clearButton: {
-    backgroundColor: '#FF0000',
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#ff3b30',
     marginRight: 8,
-    color:'red',
+  },
+  clearButtonText: {
+    color: '#ff3b30',
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   orderButton: {
     backgroundColor: '#4CAF50',

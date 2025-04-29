@@ -1,10 +1,19 @@
 import { useLocalSearchParams } from 'expo-router';
-import { View, Text, Image, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, Image, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import { useEffect, useState } from 'react';
 import { useCart } from '../../context/CartProvider';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 type Product = {
   id: string;
@@ -38,12 +47,18 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Fetch product details
         const productRef = doc(db, 'products', id as string);
         const productSnap = await getDoc(productRef);
         
         if (!productSnap.exists()) {
-          throw new Error('Product not found');
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Product Not Found',
+              body: 'The requested product could not be found',
+            },
+            trigger: null,
+          });
+          return;
         }
 
         const productData = productSnap.data();
@@ -58,7 +73,6 @@ export default function ProductDetailScreen() {
         };
         setProduct(currentProduct);
 
-        // 2. Fetch shop details if product has shopId
         if (currentProduct.shopId) {
           const shopRef = doc(db, 'shops', currentProduct.shopId);
           const shopSnap = await getDoc(shopRef);
@@ -77,8 +91,14 @@ export default function ProductDetailScreen() {
           }
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
-        Alert.alert('Error', 'Failed to load product details');
+        console.error('Error:', error);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'Error',
+            body: 'Failed to load product details',
+          },
+          trigger: null,
+        });
       } finally {
         setLoading(false);
       }
@@ -97,11 +117,28 @@ export default function ProductDetailScreen() {
         name: product.name,
         price: product.price,
         image: product.image,
-        unit: product.unit
+        unit: product.unit,
+        shopId: product.shopId,
+        shopName: shop?.name,
+        farmerId: shop?.farmerId
       });
-      Alert.alert('Success', `${product.name} added to cart!`);
+      
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Added to Cart',
+          body: `${product.name} was added to your cart`,
+          sound: true,
+        },
+        trigger: null,
+      });
     } catch (error) {
-      Alert.alert('Error', 'Failed to add product to cart');
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Error',
+          body: 'Failed to add to cart',
+        },
+        trigger: null,
+      });
     } finally {
       setAddingToCart(false);
     }
@@ -111,6 +148,7 @@ export default function ProductDetailScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading product...</Text>
       </View>
     );
   }
@@ -118,26 +156,24 @@ export default function ProductDetailScreen() {
   if (!product) {
     return (
       <View style={styles.container}>
-        <Text>Product not found</Text>
+        <Text style={styles.errorText}>Product not found</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Product Image */}
       <Image 
         source={{ uri: product.image }} 
         style={styles.image}
         defaultSource={{ uri: 'https://via.placeholder.com/300' }}
       />
 
-      {/* Product Info */}
       <View style={styles.productInfo}>
         <Text style={styles.name}>{product.name}</Text>
         
         <View style={styles.priceContainer}>
-          <Text style={styles.price}>${product.price.toFixed(2)}</Text>
+          <Text style={styles.price}>৳{product.price.toFixed(2)}</Text>
           <Text style={styles.unit}>/{product.unit}</Text>
         </View>
 
@@ -146,7 +182,6 @@ export default function ProductDetailScreen() {
         )}
       </View>
 
-      {/* Shop Details */}
       {shop && (
         <View style={styles.shopContainer}>
           <Text style={styles.sectionTitle}>Shop Details</Text>
@@ -162,8 +197,8 @@ export default function ProductDetailScreen() {
             <View style={styles.shopInfo}>
               <Text style={styles.shopName}>{shop.name}</Text>
               {shop.rating && (
-                <View style={styles.ratingContainer}>
-                  <Ionicons name="star" size={16} color="#FFD700" />
+                <View style={styles.textWrapper}>
+                  <Ionicons name="star" size={16} color="#FFD700" style={styles.iconMargin} />
                   <Text style={styles.ratingText}>{shop.rating.toFixed(1)}</Text>
                 </View>
               )}
@@ -171,24 +206,24 @@ export default function ProductDetailScreen() {
           </View>
 
           <View style={styles.shopDetails}>
-            <View style={styles.detailRow}>
-              <Ionicons name="key-outline" size={18} color="#555" />
+            <View style={styles.iconWithText}>
+              <Ionicons name="key-outline" size={18} color="#555" style={styles.iconMargin} />
               <Text style={styles.shopDetail}>Farmer ID: {shop.farmerId}</Text>
             </View>
 
-            <View style={styles.detailRow}>
-              <Ionicons name="key-outline" size={18} color="#555" />
-              <Text style={styles.shopDetail}>Shop name: {shop.name}</Text>
+            <View style={styles.iconWithText}>
+              <Ionicons name="storefront-outline" size={18} color="#555" style={styles.iconMargin} />
+              <Text style={styles.shopDetail}>Shop: {shop.name}</Text>
             </View>
             
-            <View style={styles.detailRow}>
-              <Ionicons name="location-outline" size={18} color="#555" />
+            <View style={styles.iconWithText}>
+              <Ionicons name="location-outline" size={18} color="#555" style={styles.iconMargin} />
               <Text style={styles.shopDetail}>{shop.location}</Text>
             </View>
             
             {shop.productsCount && (
-              <View style={styles.detailRow}>
-                <Ionicons name="basket-outline" size={18} color="#555" />
+              <View style={styles.iconWithText}>
+                <Ionicons name="basket-outline" size={18} color="#555" style={styles.iconMargin} />
                 <Text style={styles.shopDetail}>{shop.productsCount} products available</Text>
               </View>
             )}
@@ -196,7 +231,6 @@ export default function ProductDetailScreen() {
         </View>
       )}
 
-      {/* Add to Cart Button */}
       <TouchableOpacity 
         style={styles.addToCartButton}
         onPress={handleAddToCart}
@@ -205,10 +239,11 @@ export default function ProductDetailScreen() {
         {addingToCart ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.buttonContent}>
             <Ionicons name="cart-outline" size={20} color="#fff" />
-            <Text style={styles.addToCartText}>Add to Cart</Text> {/* Wrap text in <Text> */}
+            <Text style={styles.addToCartText}>Add to Cart</Text>
           </View>
+
         )}
       </TouchableOpacity>
     </View>
@@ -225,6 +260,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#ff3b30',
+    textAlign: 'center',
+    marginTop: 20,
   },
   image: {
     width: '100%',
@@ -262,6 +308,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#555',
+    marginTop: 8,
   },
   sectionTitle: {
     fontSize: 20,
@@ -294,28 +341,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
-  ratingContainer: {
+  textWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   ratingText: {
-    marginLeft: 4,
+    marginLeft: 8,
     color: '#666',
   },
   shopDetails: {
     borderTopWidth: 1,
     borderTopColor: '#eee',
     paddingTop: 12,
-    fontWeight: 'bold',
   },
-  detailRow: {
+  iconWithText: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
+  iconMargin: {
+    marginRight: 8,
+  },
   shopDetail: {
     fontSize: 14,
-    marginLeft: 8,
     color: '#555',
   },
   addToCartButton: {
@@ -326,6 +374,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     marginBottom: 16,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   addToCartText: {
     color: '#fff',

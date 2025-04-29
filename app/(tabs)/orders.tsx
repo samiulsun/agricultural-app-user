@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Alert, Image } from 'react-native';
-import { collection, query, where, getDocs, getFirestore, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, getFirestore, orderBy, doc, getDoc } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,9 @@ type OrderItem = {
   quantity: number;
   unit: string;
   image: string;
+  farmerId: string;
+  shopId: string;
+  shopName?: string;
 };
 
 type Order = {
@@ -20,7 +23,7 @@ type Order = {
   items: OrderItem[];
   total: number;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
-  createdAt: any;
+  createdAt: Date;
   deliveryAddress: string;
   userId: string;
 };
@@ -29,93 +32,135 @@ export default function OrdersScreen() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const db = getFirestore(app);
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+  const fetchShopInfo = async (shopId: string | undefined) => {
+    if (!shopId) {
+      return {
+        name: 'Unknown Shop',
+        farmerId: 'unknown'
+      };
+    }
 
+    try {
+      const shopRef = doc(db, 'shops', shopId);
+      const shopSnap = await getDoc(shopRef);
+      if (shopSnap.exists()) {
+        return {
+          name: shopSnap.data().name || 'Unknown Shop',
+          farmerId: shopSnap.data().farmerId || 'unknown'
+        };
+      }
+      return {
+        name: 'Unknown Shop',
+        farmerId: 'unknown'
+      };
+    } catch (error) {
+      console.error('Error fetching shop info:', error);
+      return {
+        name: 'Unknown Shop',
+        farmerId: 'unknown'
+      };
+    }
+  };
+
+  const fetchOrders = async () => {
+    if (!user) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      let q;
+      let querySnapshot;
+      let usedFallback = false;
+      
       try {
-        const q = query(
+        q = query(
           collection(db, 'orders'),
           where('userId', '==', user.id),
           orderBy('createdAt', 'desc')
         );
-        const querySnapshot = await getDocs(q);
+        querySnapshot = await getDocs(q);
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && (error as any).code === 'failed-precondition') {
+          console.warn('Using fallback query - index may not be ready');
+          q = query(
+            collection(db, 'orders'),
+            where('userId', '==', user.id)
+          );
+          querySnapshot = await getDocs(q);
+          usedFallback = true;
+        } else {
+          throw error;
+        }
+      }
+
+      const ordersData: Order[] = [];
+      
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data();
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
         
-        const ordersData: Order[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          // Convert Firestore timestamp to Date if it exists
-          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-          
-          ordersData.push({
-            id: doc.id,
-            items: data.items.map((item: any) => ({
+        // Process items with shop info
+        const itemsWithShopInfo = await Promise.all(
+          data.items.map(async (item: any) => {
+            const shopInfo = await fetchShopInfo(item.shopId);
+            return {
               id: item.id,
               name: item.name,
               price: item.price,
               quantity: item.quantity,
               unit: item.unit,
-              image: item.image || 'https://via.placeholder.com/100'
-            })),
-            total: data.total,
-            status: data.status || 'pending',
-            createdAt: createdAt,
-            deliveryAddress: data.deliveryAddress || 'To be specified',
-            userId: data.userId
-          });
-        });
-        setOrders(ordersData);
-      } catch (error) {
-        console.error('Error fetching orders:', error);
-        Alert.alert('Error', 'Failed to load orders');
-      } finally {
-        setLoading(false);
-      }
-    };
+              image: item.image || 'https://via.placeholder.com/100',
+              farmerId: shopInfo.farmerId,
+              shopId: item.shopId || 'unknown',
+              shopName: shopInfo.name
+            };
+          })
+        );
 
-    fetchOrders();
-  }, [user]);
-
-  // Add a refresh function
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, 'orders'),
-        where('userId', '==', user?.id),
-        orderBy('createdAt', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      
-      const ordersData: Order[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-        
         ordersData.push({
           id: doc.id,
-          items: data.items,
+          items: itemsWithShopInfo,
           total: data.total,
           status: data.status || 'pending',
-          createdAt: createdAt,
+          createdAt,
           deliveryAddress: data.deliveryAddress || 'To be specified',
           userId: data.userId
         });
-      });
+      }
+
+      if (usedFallback) {
+        ordersData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      }
+
       setOrders(ordersData);
+      setError(null);
     } catch (error) {
-      console.error('Error refreshing orders:', error);
+      console.error('Error fetching orders:', error);
+      setError('Failed to load orders. Please try again later.');
+      if (error instanceof Error && 'code' in error && (error as any).code === 'failed-precondition') {
+        setError('Please create the required index in Firebase Console');
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-   
+  useEffect(() => {
+    fetchOrders();
+  }, [user?.id]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchOrders();
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return '#4CAF50';
@@ -125,10 +170,31 @@ export default function OrdersScreen() {
     }
   };
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name="warning-outline" size={50} color="#ff6b6b" />
+        <Text style={styles.errorText}>{error}</Text>
+        {error.includes('index') && (
+          <Text style={styles.helpText}>
+            Click the link in your console to create the index
+          </Text>
+        )}
+        <TouchableOpacity 
+          onPress={handleRefresh}
+          style={styles.refreshButton}
+        >
+          <Ionicons name="refresh" size={20} color="#2e86de" />
+          <Text style={styles.refreshText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -138,6 +204,13 @@ export default function OrdersScreen() {
       <View style={styles.emptyContainer}>
         <Ionicons name="receipt-outline" size={50} color="#ccc" />
         <Text style={styles.emptyText}>You have no past orders</Text>
+        <TouchableOpacity 
+          onPress={handleRefresh}
+          style={styles.refreshButton}
+        >
+          <Ionicons name="refresh" size={20} color="#2e86de" />
+          <Text style={styles.refreshText}>Refresh</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -150,6 +223,8 @@ export default function OrdersScreen() {
         data={orders}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
         renderItem={({ item }) => (
           <View style={styles.orderCard}>
             <View style={styles.orderHeader}>
@@ -163,9 +238,11 @@ export default function OrdersScreen() {
               {format(item.createdAt, 'MMM dd, yyyy - hh:mm a')}
             </Text>
 
-            <View style={styles.itemsContainer}>
-              {item.items.map((product, index) => (
-                <View key={`${product.id}-${index}`} style={styles.itemContainer}>
+            <FlatList
+              data={item.items}
+              keyExtractor={(product) => `${product.id}-${Math.random().toString(36).substr(2, 9)}`}
+              renderItem={({ item: product }) => (
+                <View style={styles.itemContainer}>
                   <Image 
                     source={{ uri: product.image }} 
                     style={styles.productImage}
@@ -176,21 +253,43 @@ export default function OrdersScreen() {
                       {product.quantity}x {product.name}
                     </Text>
                     <Text style={styles.itemUnit}>{product.unit}</Text>
+                    
+                    {/* Display Shop and Farmer Info */}
+                    <View style={styles.shopInfoContainer}>
+                      <View style={styles.shopInfoRow}>
+                        <Ionicons name="storefront-outline" size={14} color="#666" />
+                        <Text style={styles.shopInfoText}>{product.shopName}</Text>
+                      </View>
+                      <View style={styles.shopInfoRow}>
+                        <Ionicons name="person-outline" size={14} color="#666" />
+                        <Text style={styles.shopInfoText}>Farmer ID: {product.farmerId}</Text>
+                      </View>
+                    </View>
                   </View>
                   <Text style={styles.itemPrice}>
-                    ${(product.price * product.quantity).toFixed(2)}
+                    ৳{(product.price * product.quantity).toFixed(2)}
                   </Text>
                 </View>
-              ))}
-            </View>
+              )}
+            />
 
             <View style={styles.orderFooter}>
-              <Text style={styles.totalText}>Total: ${item.total.toFixed(2)}</Text>
-              <TouchableOpacity style={styles.addressButton}>
+              <Text style={styles.totalText}>Total: ৳{item.total.toFixed(2)}</Text>
+              <TouchableOpacity 
+                style={styles.addressButton}
+                onPress={() => {
+                  Alert.alert(
+                    'Delivery Address',
+                    item.deliveryAddress === 'To be specified' 
+                      ? 'No address provided' 
+                      : item.deliveryAddress
+                  );
+                }}
+              >
                 <Ionicons name="location-outline" size={16} color="#2e86de" />
                 <Text style={styles.addressText}>
                   {item.deliveryAddress === 'To be specified' ? 
-                   'Add Address' : item.deliveryAddress}
+                   'Add Address' : 'View Address'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -216,11 +315,39 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   emptyText: {
     fontSize: 18,
     color: '#666',
     marginTop: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ff6b6b',
+    marginTop: 16,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  helpText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: '#f1f8ff',
+    borderRadius: 8,
+  },
+  refreshText: {
+    color: '#2e86de',
+    marginLeft: 8,
+    fontWeight: '500',
   },
   title: {
     fontSize: 24,
@@ -268,9 +395,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 12,
   },
-  itemsContainer: {
-    marginBottom: 12,
-  },
   itemContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -294,6 +418,19 @@ const styles = StyleSheet.create({
   itemUnit: {
     fontSize: 12,
     color: '#666',
+  },
+  shopInfoContainer: {
+    marginTop: 4,
+  },
+  shopInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  shopInfoText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
   },
   itemPrice: {
     fontSize: 14,
