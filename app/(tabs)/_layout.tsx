@@ -20,10 +20,8 @@ export default function TabLayout() {
   const { cartItems } = useCart();
 
   useEffect(() => {
-    // Call this early in your app lifecycle
     registerForPushNotifications();
     
-    // Set notification handler
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -54,20 +52,14 @@ export default function TabLayout() {
             fontSize: 12,
             fontWeight: '500',
           },
-          headerStyle: {
-            backgroundColor: '#fff',
-          },
-          headerTintColor: '#0f0f0f',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
+          // This removes headers from all tabs
+          headerShown: false,
         }}
       >
         <Tabs.Screen
           name="index"
           options={{
             title: 'Home',
-            headerTitle: 'Home',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="home-outline" size={size} color={color} />
             ),
@@ -78,7 +70,6 @@ export default function TabLayout() {
           name="products"
           options={{
             title: 'Products',
-            headerTitle: 'All Products',
             tabBarIcon: ({ color, size }) => (
               <MaterialIcons name="fastfood" size={size} color={color} />
             ),
@@ -89,7 +80,6 @@ export default function TabLayout() {
           name="cart"
           options={{
             title: 'Cart',
-            headerTitle: 'Your Cart',
             tabBarIcon: ({ color, size }) => (
               <View style={{ position: 'relative' }}>
                 <Ionicons name="cart-outline" size={size} color={color} />
@@ -119,7 +109,6 @@ export default function TabLayout() {
           name="orders"
           options={{
             title: 'Orders',
-            headerTitle: 'Your Orders',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="receipt-outline" size={size} color={color} />
             ),
@@ -130,7 +119,6 @@ export default function TabLayout() {
           name="profile"
           options={{
             title: 'Profile',
-            headerTitle: 'Your Profile',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="person-outline" size={size} color={color} />
             ),
