@@ -236,16 +236,19 @@ export default function ProductDetailScreen() {
         onPress={handleAddToCart}
         disabled={addingToCart}
       >
-        {addingToCart ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <View style={styles.buttonContent}>
-            <Ionicons name="cart-outline" size={20} color="#fff" />
-            <Text style={styles.addToCartText}>Add to Cart</Text>
-          </View>
+        <View style={styles.buttonContent}>
+          {addingToCart ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="cart-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.addToCartText}>Add to Cart</Text>
 
-        )}
+            </>
+          )}
+        </View>
       </TouchableOpacity>
+
     </View>
   );
 }
@@ -378,6 +381,7 @@ const styles = StyleSheet.create({
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   addToCartText: {
     color: '#fff',
