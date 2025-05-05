@@ -5,6 +5,7 @@ import { app } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import Toast from 'react-native-toast-message';
 
 type OrderItem = {
   id: string;
@@ -140,9 +141,19 @@ export default function OrdersScreen() {
 
       setOrders(ordersData);
       setError(null);
+      Toast.show({
+        type: 'success',
+        text1: 'Orders Loaded',
+        text2: 'Your orders have been successfully loaded.'
+      });
     } catch (error) {
       console.error('Error fetching orders:', error);
       setError('Failed to load orders. Please try again later.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to load orders. Please try again later.'
+      });
       if (error instanceof Error && 'code' in error && (error as any).code === 'failed-precondition') {
         setError('Please create the required index in Firebase Console');
       }
@@ -217,6 +228,7 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
+      <Toast />
       <Text style={styles.title}>Your Orders</Text>
       
       <FlatList

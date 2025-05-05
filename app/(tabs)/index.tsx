@@ -34,7 +34,16 @@ type Product = {
 type WeatherData = {
 	temp: number;
 	description: string;
-	icon: string;
+	icon:
+		| 'sunny'
+		| 'moon'
+		| 'partly-sunny'
+		| 'cloudy-night'
+		| 'cloud'
+		| 'cloudy'
+		| 'rainy'
+		| 'thunderstorm'
+		| 'snow';
 	city: string;
 };
 
@@ -57,32 +66,24 @@ export default function HomeScreen() {
 
 	const OPENWEATHER_API_KEY = 'd734f951c52155a9771143721b7eb908';
 
-	// Map product types to icons
+	// Updated the getCategoryIcon function to assign random icons for each category
 	const getCategoryIcon = (categoryName: string) => {
-		switch (categoryName.toLowerCase()) {
-			case 'vegetables':
-				return <MaterialIcons name='eco' size={20} color='#4CAF50' />;
-			case 'fruits':
-				return <FontAwesome name='apple' size={20} color='#FF9800' />;
-			case 'beverages':
-				return <MaterialCommunityIcons name='cup' size={20} color='#2196F3' />;
-			case 'grocery':
-				return (
-					<MaterialCommunityIcons name='shopping' size={20} color='#795548' />
-				);
-			case 'edible oil':
-				return (
-					<MaterialCommunityIcons
-						name='bottle-tonic'
-						size={20}
-						color='#FFC107'
-					/>
-				);
-			case 'house':
-				return <MaterialIcons name='home' size={20} color='#9C27B0' />;
-			default:
-				return <Ionicons name='grid' size={20} color='#607D8B' />;
-		}
+		const icons = [
+			<MaterialCommunityIcons name='barley' size={24} color='#039BE5' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#6D4C41' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#FBC02D' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#8E24AA' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#FF5722' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#388E3C' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#FF9800' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#1976D2' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#7B1FA2' />,
+			<MaterialCommunityIcons name='barley' size={24} color='#FFC107' />,
+		];
+
+		// Generate a random index to pick an icon
+		const randomIndex = Math.floor(Math.random() * icons.length);
+		return icons[randomIndex];
 	};
 
 	useEffect(() => {
@@ -137,7 +138,7 @@ export default function HomeScreen() {
 					setWeather({
 						temp: Math.round(data.main.temp),
 						description: data.weather[0].description,
-						icon: mapWeatherIcon(data.weather[0].icon),
+						icon: mapWeatherIcon(data.weather[0].icon) as WeatherData['icon'],
 						city: data.name,
 					});
 				} else {
@@ -223,13 +224,18 @@ export default function HomeScreen() {
 							Hello,{' '}
 							<Text style={styles.userName}>{user?.name || 'Guest'}</Text>
 						</Text>
+
 						{weather && (
 							<View style={styles.weatherBox}>
 								<Ionicons
-									name={`${weather.icon}-outline`}
-									size={20}
+									name={
+										weather.icon
+											? (`${weather.icon}-outline` as const)
+											: 'cloud-outline'
+									}
+									size={18}
 									color='#4CAF50'
-									style={{ marginRight: 4 }}
+									style={{ marginRight: 6 }}
 								/>
 								<Text style={styles.weatherText}>
 									{weather.temp}°C • {weather.description}
@@ -237,17 +243,13 @@ export default function HomeScreen() {
 							</View>
 						)}
 					</View>
+
 					<Link href='/profile' asChild>
-						<TouchableOpacity>
+						<TouchableOpacity style={styles.profileIconContainer}>
 							<Ionicons
 								name='person-circle-outline'
-								size={40}
+								size={60}
 								color='#4CAF50'
-								style={{
-									shadowColor: '#000',
-									shadowOpacity: 0.2,
-									shadowRadius: 5,
-								}}
 							/>
 						</TouchableOpacity>
 					</Link>
@@ -258,12 +260,12 @@ export default function HomeScreen() {
 					<Ionicons
 						name='search'
 						size={20}
-						color='#aaa'
+						color='#6b7280'
 						style={styles.searchIcon}
 					/>
 					<TextInput
 						placeholder='Search products...'
-						placeholderTextColor='#aaa'
+						placeholderTextColor='#9ca3af'
 						style={styles.searchInput}
 						value={searchQuery}
 						onChangeText={setSearchQuery}
@@ -274,40 +276,47 @@ export default function HomeScreen() {
 			{/* Categories Horizontal Scroll */}
 			<View style={styles.sectionContainer}>
 				<Text style={styles.sectionTitle}>Categories</Text>
-				<ScrollView
-					horizontal
-					showsHorizontalScrollIndicator={false}
-					contentContainerStyle={styles.categoriesScrollContent}
-				>
-					{categories.map((category) => (
+				<FlatList
+					data={categories}
+					numColumns={4}
+					keyExtractor={(item) => item.name}
+					renderItem={({ item }) => (
 						<TouchableOpacity
-							key={category.name}
 							style={[
-								styles.categoryButton,
-								selectedCategory === category.name &&
-									styles.selectedCategoryButton,
+								styles.categoryGridItem,
+								selectedCategory === item.name &&
+									styles.selectedCategoryGridItem,
 							]}
-							onPress={() => handleCategoryPress(category.name)}
+							onPress={() => handleCategoryPress(item.name)}
 						>
-							<View style={styles.categoryIconContainer}>{category.icon}</View>
-							<Text
+							<View
 								style={[
-									styles.categoryText,
-									selectedCategory === category.name &&
-										styles.selectedCategoryText,
+									styles.iconWrapper,
+									selectedCategory === item.name && styles.selectedIconWrapper,
 								]}
 							>
-								{category.name.charAt(0).toUpperCase() + category.name.slice(1)}
+								{item.icon}
+							</View>
+							<Text
+								style={[
+									styles.categoryLabel,
+									selectedCategory === item.name &&
+										styles.selectedCategoryLabel,
+								]}
+							>
+								{item.name.charAt(0).toUpperCase() + item.name.slice(1)}
 							</Text>
 						</TouchableOpacity>
-					))}
-				</ScrollView>
+					)}
+					scrollEnabled={false}
+					contentContainerStyle={styles.categoriesGrid}
+				/>
 			</View>
 
 			{/* Featured Products Section */}
 			<View style={styles.sectionContainer}>
 				<Text style={styles.sectionTitle}>Featured Products</Text>
-					{featuredProducts.length === 0 ? (
+				{featuredProducts.length === 0 ? (
 					<View style={styles.emptyContainer}>
 						<Ionicons name='sad-outline' size={48} color='#ccc' />
 						<Text style={styles.emptyText}>No products found</Text>
@@ -339,7 +348,7 @@ export default function HomeScreen() {
 										</Text>
 										<View style={styles.priceContainer}>
 											<Text style={styles.productPrice}>
-													৳{item.price.toFixed(2)}
+												৳{item.price.toFixed(2)}
 											</Text>
 											<Text style={styles.productUnit}>/{item.unit}</Text>
 										</View>
@@ -359,206 +368,267 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#f8f9fa',
+		backgroundColor: '#f6fcf6',
 		paddingHorizontal: 16,
 	},
+
 	loadingContainer: {
 		flex: 1,
 		justifyContent: 'center',
 		alignItems: 'center',
 	},
+
 	topSection: {
-		marginBottom: 16,
+		marginBottom: 20,
+		marginTop: 20,
 	},
+
+	header: {
+		flexDirection: 'row',
+		justifyContent: 'space-between',
+		alignItems: 'center',
+		backgroundColor: '#ffffff',
+		padding: 16,
+		borderRadius: 12,
+		borderWidth: 1,
+		borderColor: '#e5e7eb',
+		marginBottom: 20,
+	},
+
+	headerLeft: {
+		flex: 1,
+	},
+
+	welcomeText: {
+		fontSize: 16,
+		color: '#111827',
+	},
+
+	userName: {
+		fontWeight: '600',
+		color: '#10b981',
+	},
+
+	weatherBox: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		backgroundColor: '#f0fdf4',
+		paddingHorizontal: 12,
+		paddingVertical: 6,
+		borderRadius: 8,
+		marginTop: 6,
+	},
+
+	weatherText: {
+		fontSize: 13,
+		color: '#065f46',
+	},
+
+	profileIconContainer: {
+		paddingLeft: 12,
+	},
+
 	searchSection: {
 		position: 'relative',
-		marginBottom: 16,
+		flexDirection: 'row',
+		alignItems: 'center',
+		backgroundColor: '#f1f5f9', // soft gray-blue
+		borderRadius: 12,
+		borderWidth: 1,
+		borderColor: '#e5e7eb',
+		paddingHorizontal: 14,
+		paddingVertical: 2,
+		marginBottom: 20,
 	},
+
+	searchIcon: {
+		marginRight: 8,
+	},
+
 	searchInput: {
+		flex: 1,
+		fontSize: 16,
+		color: '#111827',
+	},
+
+	sectionContainer: {
+		marginBottom: 24,
+	},
+
+	sectionTitle: {
+		fontSize: 24,
+		fontWeight: 'bold',
+		color: '#333',
+		marginBottom: 12,
+	},
+
+	categoriesScrollContent: {
+		paddingVertical: 4,
+	},
+
+	categoryButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		paddingHorizontal: 14,
+		paddingVertical: 10,
 		backgroundColor: '#fff',
 		borderRadius: 12,
-		paddingHorizontal: 40,
-		paddingVertical: 12,
+		marginRight: 12,
+		shadowColor: '#000',
+		shadowOffset: { width: 0, height: 1 },
+		shadowOpacity: 0.06,
+		shadowRadius: 3,
+		elevation: 1,
+	},
+
+	selectedCategoryButton: {
+		backgroundColor: '#4CAF50',
+	},
+
+	categoryIconContainer: {
+		marginRight: 8,
+	},
+
+	categoryText: {
+		fontSize: 14,
+		fontWeight: 'bold',
+		color: '#444',
+	},
+
+	selectedCategoryText: {
+		color: '#fff',
+		fontWeight: '600',
+	},
+
+	productsContainer: {
+		marginBottom: 80,
+	},
+
+	productCard: {
+		flex: 1,
+		margin: 8,
+		backgroundColor: '#ffffff',
+		borderRadius: 16,
+		overflow: 'hidden',
+		borderWidth: 1,
+		borderColor: '#e5e7eb',
+		shadowColor: '#000',
+		shadowOffset: { width: 0, height: 1 },
+		shadowOpacity: 0.05,
+		shadowRadius: 4,
+		elevation: 2,
+	},
+
+
+
+	newBadgeText: {
+		color: '#fff',
+		fontSize: 10,
+		fontWeight: 'bold',
+	},
+
+	productImage: {
+		width: '100%',
+		height: 140,
+		resizeMode: 'cover',
+		backgroundColor: '#f3f4f6',
+	},
+
+	productInfo: {
+		padding: 12,
+	},
+
+	productName: {
+		fontSize: 15,
+		fontWeight: '500',
+		color: '#111827',
+		marginBottom: 6,
+	},
+
+	priceContainer: {
+		flexDirection: 'row',
+		alignItems: 'baseline',
+	},
+
+	productPrice: {
 		fontSize: 16,
+		fontWeight: '700',
+		color: '#10b981',
+	},
+	
+	productUnit: {
+		fontSize: 13,
+		color: '#6b7280',
+		marginLeft: 4,
+	},
+	
+	newBadge: {
+		position: 'absolute',
+		top: 10,
+		left: 10,
+		backgroundColor: '#10b981',
+		paddingHorizontal: 8,
+		paddingVertical: 2,
+		borderRadius: 4,
+		zIndex: 1,
+	},
+	
+
+	emptyContainer: {
+		alignItems: 'center',
+		padding: 32,
+	},
+
+	emptyText: {
+		fontSize: 16,
+		color: '#888',
+		marginTop: 8,
+	},
+	categoriesGrid: {
+		alignItems: 'center',
+	},
+
+	categoryGridItem: {
+		width: '22%',
+		margin: '2%',
+		backgroundColor: '#fff',
+		borderRadius: 12,
+		alignItems: 'center',
+		paddingVertical: 16,
+		paddingHorizontal: 6,
 		shadowColor: '#000',
 		shadowOffset: { width: 0, height: 1 },
 		shadowOpacity: 0.05,
 		shadowRadius: 3,
 		elevation: 2,
 	},
-	searchIcon: {
-		position: 'absolute',
-		left: 16,
-		top: 14,
-		zIndex: 1,
-	},
-	header: {
-		marginTop: 10,
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-		marginBottom: 24,
-		padding: 12,
-		backgroundColor: '#ffffff',
-		borderRadius: 16,
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 2 },
-		shadowOpacity: 0.1,
-		shadowRadius: 4,
-		elevation: 4,
-		paddingLeft: 20,
-		paddingRight: 20,
-	},
 
-	headerLeft: {
-		flex: 1,
-		justifyContent: 'center',
-	},
-
-	welcomeText: {
-		fontSize: 18,
-		color: '#333',
-		marginBottom: 10,
-	},
-
-	userName: {
-		fontWeight: 'bold',
-		color: '#4CAF50',
-	},
-
-	weatherBox: {
-		flexDirection: 'row',
-		justifyContent: 'center',
-		alignItems: 'center',
-		backgroundColor: '#E8F5E9',
-		paddingHorizontal: 20,
-		paddingVertical: 10,
-		borderRadius: 12,
-		marginTop: 4,
-		marginRight: 150,
-		marginBottom: 10,
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 1 },
-		shadowOpacity: 0.1,
-		shadowRadius: 3,
-		elevation: 2,
-	},
-
-	weatherText: {
-		fontSize: 14,
-		color: '#388E3C',
-	},
-	sectionContainer: {
-		marginBottom: 24,
-	},
-	sectionTitle: {
-		fontSize: 20,
-		fontWeight: 'bold',
-		marginBottom: 16,
-		color: '#333',
-	},
-	// Categories styles
-	categoriesScrollContent: {
-		paddingHorizontal: 4,
-		paddingBottom: 8,
-	},
-	categoryButton: {
-		paddingHorizontal: 16,
-		paddingVertical: 12,
-		borderRadius: 12,
-		backgroundColor: '#fff',
-		marginRight: 12,
-		flexDirection: 'row',
-		alignItems: 'center',
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 1 },
-		shadowOpacity: 0.1,
-		shadowRadius: 3,
-		elevation: 2,
-	},
-	selectedCategoryButton: {
+	selectedCategoryGridItem: {
 		backgroundColor: '#4CAF50',
 	},
-	categoryIconContainer: {
-		marginRight: 8,
-	},
-	categoryText: {
-		fontSize: 14,
-		color: '#666',
-		fontWeight: '500',
-	},
-	selectedCategoryText: {
-		color: '#fff',
-		fontWeight: 'bold',
-	},
-	productsContainer: {
-		paddingBottom: 40,
-	},
-	productCard: {
-		flex: 1,
-		margin: 8,
-		backgroundColor: '#fff',
-		borderRadius: 12,
-		overflow: 'hidden',
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 2 },
-		shadowOpacity: 0.1,
-		shadowRadius: 6,
-		elevation: 3,
-		position: 'relative',
-	},
-	newBadge: {
-		position: 'absolute',
-		top: 8,
-		right: 8,
-		backgroundColor: '#4ECDC4',
-		borderRadius: 4,
-		paddingHorizontal: 6,
-		paddingVertical: 2,
-		zIndex: 1,
-	},
-	newBadgeText: {
-		color: '#fff',
-		fontSize: 10,
-		fontWeight: 'bold',
-	},
-	productImage: {
-		width: '100%',
-		height: 140,
-		resizeMode: 'cover',
-		backgroundColor: '#f5f5f5',
-	},
-	productInfo: {
-		padding: 12,
-	},
-	productName: {
-		fontSize: 14,
-		fontWeight: '600',
-		marginBottom: 8,
-		color: '#333',
-	},
-	priceContainer: {
-		flexDirection: 'row',
-		alignItems: 'flex-end',
-	},
-	productPrice: {
-		fontSize: 16,
-		fontWeight: 'bold',
-		color: '#4CAF50',
-	},
-	productUnit: {
-		fontSize: 12,
-		color: '#666',
-		marginLeft: 4,
-		marginBottom: 1,
-	},
-	emptyContainer: {
+
+	iconWrapper: {
+		width: 40,
+		height: 40,
+		borderRadius: 20,
+		backgroundColor: '#e0f2f1',
 		alignItems: 'center',
-		padding: 32,
+		justifyContent: 'center',
+		marginBottom: 8,
 	},
-	emptyText: {
-		fontSize: 16,
-		color: '#888',
-		marginTop: 8,
+
+	selectedIconWrapper: {
+		backgroundColor: '#a5d6a7',
+	},
+
+	categoryLabel: {
+		fontSize: 12,
+		textAlign: 'center',
+		color: '#444',
+	},
+
+	selectedCategoryLabel: {
+		color: '#fff',
+		fontWeight: '600',
 	},
 });
